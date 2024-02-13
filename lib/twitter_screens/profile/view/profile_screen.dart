@@ -1,9 +1,10 @@
-import 'dart:io';
-
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:io' as io;
 
 class ProfileScreenWIdget extends StatefulWidget {
   const ProfileScreenWIdget({super.key});
@@ -16,239 +17,233 @@ enum PickImageOptions { gallery, camera }
 
 class _ProfileScreenWIdgetState extends State<ProfileScreenWIdget> {
   TextEditingController nameController = TextEditingController();
-  TextEditingController mobileNumberController = TextEditingController();
+  TextEditingController mobileController = TextEditingController();
+  TextEditingController alternateMobileController = TextEditingController();
   TextEditingController emailController = TextEditingController();
   TextEditingController dobController = TextEditingController();
 
-  static final firebaseFireStore = FirebaseFirestore.instance;
-
+  static FirebaseFirestore firebaseFirestore = FirebaseFirestore.instance;
+  FirebaseAuth firebaseAuth = FirebaseAuth.instance;
+  DocumentSnapshot? user;
+  String? profileUrl;
   @override
   void initState() {
-    nameController = TextEditingController(
-        text: FirebaseAuth.instance.currentUser?.displayName);
-
-    mobileNumberController = TextEditingController(
-        text: FirebaseAuth.instance.currentUser?.phoneNumber);
-
-    emailController =
-        TextEditingController(text: FirebaseAuth.instance.currentUser?.email);
-
+    getUserDetails();
     super.initState();
   }
 
-  final ImagePicker _imagePicker = ImagePicker();
-
-  File? image;
-  PickImageOptions pickImageOptions = PickImageOptions.gallery;
-
-  pickImageFrom() async {
-    XFile? pickImage = await _imagePicker.pickImage(
-        source: pickImageOptions == PickImageOptions.gallery
-            ? ImageSource.gallery
-            : ImageSource.camera);
-    if (pickImage != null) {
-      image = File(pickImage.path);
-      setState(() {});
-    }
+  ImagePicker imagePicker = ImagePicker();
+  pickImage() {
+    ImagePicker().pickImage(source: ImageSource.gallery).then((value) {
+      uploadFile(value);
+    });
   }
 
-  CollectionReference users = firebaseFireStore.collection('users');
+  List<UploadTask> _uploadTasks = [];
+
+  Future<UploadTask?> uploadFile(XFile? file) async {
+    if (file == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No file was selected'),
+        ),
+      );
+
+      return null;
+    }
+
+    UploadTask uploadTask;
+
+    // Create a Reference to the file
+    Reference ref = FirebaseStorage.instance.ref().child('profile_pics').child(
+        '/${firebaseAuth.currentUser?.uid}/${DateTime.now().millisecondsSinceEpoch}');
+
+    final metadata = SettableMetadata(
+      contentType: 'image/jpeg',
+      customMetadata: {'picked-file-path': file.path},
+    );
+
+    if (kIsWeb) {
+      uploadTask = ref.putData(await file.readAsBytes(), metadata);
+    } else {
+      uploadTask = ref.putFile(io.File(file.path), metadata);
+    }
+    uploadTask.whenComplete(() async {
+      profileUrl = await ref.getDownloadURL();
+      setState(() {});
+    });
+
+    return Future.value(uploadTask);
+  }
+
+  getUserDetails() async {
+    user = await users.doc(firebaseAuth.currentUser?.uid).get();
+
+    if (user?.exists ?? false) {
+      nameController =
+          TextEditingController(text: (user?.data() as Map)['full_name']);
+      mobileController =
+          TextEditingController(text: (user?.data() as Map)['mobile']);
+      emailController =
+          TextEditingController(text: (user?.data() as Map)['email_id']);
+      dobController = TextEditingController(text: (user?.data() as Map)['dob']);
+    }
+    setState(() {});
+  }
+
+  CollectionReference users = firebaseFirestore.collection('users');
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          SizedBox(
-            height: 210,
-            child: Stack(
-              children: [
-                Container(
-                  height: 160,
-                  width: double.infinity,
-                  color: Colors.black,
+    return SafeArea(
+      child: Scaffold(
+        bottomNavigationBar: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: InkWell(
+            onTap: () async {
+              if (user?.exists ?? false) {
+                users
+                    .doc(firebaseAuth.currentUser?.uid)
+                    .update({
+                      'full_name': nameController.text,
+                      'mobile': mobileController.text,
+                      'email_id': emailController.text,
+                      'dob': dobController.text,
+                      'profile_pic': profileUrl
+                    })
+                    .then((value) => print("User Added"))
+                    .catchError((error) => print("Failed to add user: $error"));
+              } else {
+                users
+                    .doc(firebaseAuth.currentUser?.uid)
+                    .set({
+                      'full_name': nameController.text,
+                      'mobile': mobileController.text,
+                      'email_id': emailController.text,
+                      'dob': dobController.text,
+                      'profile_pic': profileUrl
+                    })
+                    .then((value) => print("User Added"))
+                    .catchError((error) => print("Failed to add user: $error"));
+              }
+              firebaseAuth.currentUser?.updatePhotoURL(profileUrl);
+              FirebaseAuth.instance.currentUser?.reload();
+              setState(() {});
+              firebaseAuth.currentUser?.updateDisplayName(nameController.text);
+            },
+            child: Container(
+              height: 40,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                  color: Colors.black, borderRadius: BorderRadius.circular(8)),
+              child: const Center(
+                child: Text(
+                  'Save Profile',
+                  style: TextStyle(color: Colors.white),
                 ),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Stack(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Container(
-                          height: 100,
-                          width: 100,
-                          decoration: BoxDecoration(
-                              // color: Colors.black,
-                              image:
-                                  FirebaseAuth.instance.currentUser?.photoURL !=
-                                          null
-                                      ? DecorationImage(
-                                          image: NetworkImage(FirebaseAuth
-                                              .instance.currentUser!.photoURL!),
-                                          fit: BoxFit.cover)
-                                      : null,
-                              shape: BoxShape.circle,
-                              border:
-                                  Border.all(color: Colors.white, width: 5)),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: IconButton(
-                          onPressed: () {
-                            showModalBottomSheet(
-                              backgroundColor: Colors.white,
-                              context: context,
-                              builder: (context) {
-                                return Container(
-                                  height: 100,
-                                  width: double.infinity,
-                                  child: Column(children: [
-                                    TextButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            pickImageOptions =
-                                                PickImageOptions.gallery;
-                                          });
-                                          pickImageFrom();
-                                        },
-                                        child: Text("Gallary Image Picker")),
-                                    TextButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            pickImageOptions =
-                                                PickImageOptions.camera;
-                                          });
-                                          pickImageFrom();
-                                        },
-                                        child: Text("Camera Image Picker"))
-                                  ]),
-                                );
-                              },
-                            );
-                          },
-                          icon: const Icon(Icons.add_a_photo_rounded,
-                              color: Colors.red),
-                        ),
-                      )
-                    ],
-                  ),
-                )
-              ],
-            ),
-          ),
-          Expanded(
-              child: ListView(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8.0,
-                ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12.0),
-                      child: TextField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                            labelText: "Enter Full Name",
-                            border: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.all(Radius.circular(8)))),
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12.0),
-                      child: TextField(
-                        controller: mobileNumberController,
-                        decoration: InputDecoration(
-                            labelText: "Enter Mobile Number",
-                            enabled: false,
-                            border: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.all(Radius.circular(8)))),
-                      ),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12.0),
-                      child: TextField(
-                        controller: emailController,
-                        decoration: const InputDecoration(
-                            labelText: "Enter Email Id",
-                            border: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.all(Radius.circular(8)))),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12.0),
-                      child: TextField(
-                        controller: dobController,
-                        decoration: const InputDecoration(
-                            labelText: "Enter DOB",
-                            border: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.all(Radius.circular(8)))),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            ],
-          ))
-        ],
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: InkWell(
-          onTap: () async {
-            DocumentSnapshot? user =
-                await users.doc(FirebaseAuth.instance.currentUser?.uid).get();
-
-            if (user.exists) {
-              users
-                  .doc(FirebaseAuth.instance.currentUser?.uid)
-                  .update({
-                    'full_name': nameController.text,
-                    'mobile_no': mobileNumberController.text,
-                    'email_id': emailController.text,
-                    'dob': dobController.text
-                  })
-                  .then((value) => print("User Added"))
-                  .catchError((error) => print("Failed to add user: $error"));
-            } else {
-              users
-                  .doc(FirebaseAuth.instance.currentUser?.uid)
-                  .set({
-                    'full_name': nameController.text,
-                    'mobile_no': mobileNumberController.text,
-                    'email_id': emailController.text,
-                    'dob': dobController.text
-                  })
-                  .then((value) => print("User Added"))
-                  .catchError((error) => print("Failed to add user: $error"));
-            }
-
-            FirebaseAuth.instance.currentUser
-                ?.updateDisplayName(nameController.text);
-
-            FirebaseAuth.instance.currentUser?.updatePhotoURL(
-                "https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1031&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D");
-          },
-          child: Container(
-            height: 60,
-            width: double.infinity,
-            decoration: BoxDecoration(
-                color: Colors.blue, borderRadius: BorderRadius.circular(12)),
-            child: const Center(
-              child: Text(
-                "Save Profile",
-                style: TextStyle(color: Colors.white, fontSize: 20),
               ),
             ),
           ),
         ),
+        body: Column(children: [
+          Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 30.0),
+                child: Container(
+                  height: 150,
+                  width: double.infinity,
+                  decoration: const BoxDecoration(color: Colors.black),
+                ),
+              ),
+              SizedBox(
+                height: 180,
+                width: double.infinity,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: InkWell(
+                    onTap: () {
+                      pickImage();
+                    },
+                    child: Container(
+                      height: 80,
+                      width: 80,
+                      decoration: BoxDecoration(
+                          // color: Colors.black,
+                          image: profileUrl != null
+                              ? DecorationImage(
+                                  image: NetworkImage(profileUrl!),
+                                  fit: BoxFit.cover)
+                              : FirebaseAuth.instance.currentUser?.photoURL !=
+                                      null
+                                  ? DecorationImage(
+                                      image: NetworkImage(FirebaseAuth
+                                          .instance.currentUser!.photoURL!),
+                                      fit: BoxFit.cover)
+                                  : null,
+                          border: Border.all(color: Colors.white, width: 3),
+                          shape: BoxShape.circle),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Expanded(
+              child: ListView(
+            children: [
+              const SizedBox(
+                height: 50,
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12),
+                child: TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                      labelText: 'Enter Full Name',
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder()),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12),
+                child: TextField(
+                  controller: mobileController,
+                  decoration: const InputDecoration(
+                      labelText: 'Enter Mobile Number',
+                      enabled: false,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder(),
+                      disabledBorder: OutlineInputBorder()),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12),
+                child: TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(
+                      labelText: 'Enter Email id',
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder()),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12),
+                child: TextField(
+                  controller: dobController,
+                  decoration: const InputDecoration(
+                      labelText: 'Enter DOB',
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                      border: OutlineInputBorder()),
+                ),
+              ),
+            ],
+          ))
+        ]),
       ),
     );
   }

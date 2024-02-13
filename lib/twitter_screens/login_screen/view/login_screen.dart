@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:twitter_clone/twitter_screens/home/view/home_main_screen.dart';
 import 'package:twitter_clone/twitter_screens/room/view/room_main_screen.dart';
 
 class LoginScreen extends StatefulWidget {

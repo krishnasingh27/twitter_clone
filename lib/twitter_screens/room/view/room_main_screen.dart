@@ -1,6 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:twitter_clone/twitter_screens/home/view/home_main_screen.dart';
+import 'package:twitter_clone/twitter_screens/home/view/home_main_screen_duplicate.dart';
 import 'package:twitter_clone/twitter_screens/login_screen/view/login_screen.dart';
 import 'package:twitter_clone/twitter_screens/messages/view/message_main_screen.dart';
 import 'package:twitter_clone/twitter_screens/notification/view/notification_main_screen.dart';
@@ -152,7 +152,7 @@ class _RoomMainScreenState extends State<RoomMainScreen> {
   }
 
   Map get bodyItems => {
-        BottomNavigationIcons.home: const HomeMainScreen(),
+        BottomNavigationIcons.home: const DuplicateHomeScreen(),
         BottomNavigationIcons.search: const SearchMainScreen(),
         BottomNavigationIcons.bell: const NoificationMainScreen(),
         BottomNavigationIcons.mail: const MessageMainScreen()

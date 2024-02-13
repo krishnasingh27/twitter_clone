@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:twitter_clone/twitter_screens/login_screen/view/login_screen.dart';
-import 'package:twitter_clone/twitter_screens/profile/view/profile_screen.dart';
-import 'package:twitter_clone/twitter_screens/room/view/room_main_screen.dart';
+
 import 'package:twitter_clone/twitter_screens/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -12,7 +10,8 @@ Future<void> main() async {
           apiKey: 'AIzaSyAYrx1nPAkpmXzl90rNO0dgRPC9NIe-brc',
           appId: '1:1081081201118:android:cdcbb1299b852673155d4f',
           messagingSenderId: '1081081201118',
-          projectId: 'regexprojects'));
+          projectId: 'regexprojects',
+          storageBucket: "gs://regexprojects.appspot.com"));
   runApp(const MyApp());
 }
 
